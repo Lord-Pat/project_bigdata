@@ -1,46 +1,4 @@
-import { test, expect } from "@playwright/test"
-test("acceso administrativo: iniciar sesión y cerrar sin recargar el pipeline", async ({
-  page,
-}) => {
-  const errors: string[] = []
-  page.on("pageerror", (error) => errors.push(error.message))
-  await page.route("**/api/admin/session", async (route) => {
-    const method = route.request().method()
-    if (method === "POST")
-      expect(route.request().postDataJSON()).toEqual({
-        password: "contraseña-de-prueba",
-      })
-    await route.fulfill({ json: { authenticated: method === "POST" } })
-  })
-  await page.goto("/")
-  await expect(page).toHaveTitle(/MeteoLab/)
-  await expect(
-    page.getByRole("heading", { name: "Tu primer pipeline ETL" })
-  ).toBeVisible()
-  await page.getByLabel("Fecha final", { exact: true }).fill("2026-09-12")
-  await page
-    .getByLabel("Contraseña administrativa")
-    .fill("contraseña-de-prueba")
-  await page
-    .getByRole("button", { name: "Iniciar sesión", exact: true })
-    .click()
-  await expect(page.getByText(/Acceso administrativo activo/)).toBeVisible()
-  await page.getByRole("button", { name: "Cerrar sesión", exact: true }).click()
-  await expect(
-    page.getByRole("button", { name: "Iniciar sesión", exact: true })
-  ).toBeVisible()
-  await expect(page.getByLabel("Contraseña administrativa")).toHaveValue("")
-  await expect(page.getByLabel("Fecha final", { exact: true })).toHaveValue(
-    "2026-09-12"
-  )
-  await page.setViewportSize({ width: 390, height: 844 })
-  expect(
-    await page.evaluate(
-      () => document.documentElement.scrollWidth <= window.innerWidth
-    )
-  ).toBe(true)
-  expect(errors).toEqual([])
-})
+﻿import { test, expect } from "@playwright/test"
 test("flujo real: 24 horas, selección y preview", async ({ page, request }) => {
   const errors: string[] = []
   page.on("pageerror", (e) => errors.push(e.message))

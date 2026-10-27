@@ -2,20 +2,17 @@
 import { test } from "node:test"
 import "./setup.mjs"
 const measurements = await import("../app/api/measurements/route.ts")
-const session = await import("../app/api/admin/session/route.ts")
-const { sessionCookie } = await import("../lib/etl/auth.ts")
 
-test("producción: autorización, origen, validación, upsert y verificación", async () => {
+test("producción sin login: habilitación explícita, origen, límites, upsert y persistencia", async () => {
   const originalEnv = { ...process.env }
   const originalFetch = globalThis.fetch
   Object.assign(process.env, {
     NODE_ENV: "production",
-    ADMIN_PASSWORD: "test-admin-password-very-long",
-    ADMIN_SESSION_SECRET: "test-session-secret-independent-123456789",
     SUPABASE_URL: "https://example.supabase.co",
     SUPABASE_SECRET_KEY: "sb_secret_test-private",
   })
   delete process.env.APP_ORIGIN
+  delete process.env.ETL_PERMITIR_EN_PRODUCCION
   const origin = "https://meteolab.example"
   const row = {
     ciudad: "Barcelona",
@@ -26,6 +23,7 @@ test("producción: autorización, origen, validación, upsert y verificación", 
   }
   let calls = 0
   let fail = false
+  let persisted = true
   globalThis.fetch = async (input, init) => {
     calls++
     assert.match(
@@ -51,19 +49,18 @@ test("producción: autorización, origen, validación, upsert y verificación", 
       assert.deepEqual(JSON.parse(String(init.body)), [row])
       return new Response(null, { status: 201 })
     }
-    return Response.json([row], { headers: { "content-range": "0-0/1" } })
+    return Response.json(persisted ? [row] : [], {
+      headers: { "content-range": "0-0/1" },
+    })
   }
   function request(
-    path: string,
     method = "GET",
-    cookie = "",
     body?: unknown,
     source: string | null = origin
   ) {
-    return new Request(`${origin}${path}`, {
+    return new Request(`${origin}/api/measurements`, {
       method,
       headers: {
-        ...(cookie ? { cookie } : {}),
         ...(source ? { origin: source } : {}),
         "Content-Type": "application/json",
       },
@@ -71,136 +68,71 @@ test("producción: autorización, origen, validación, upsert y verificación", 
     })
   }
   try {
-    assert.equal(
-      (await measurements.GET(request("/api/measurements"))).status,
-      401
-    )
-    assert.equal(
-      (await measurements.POST(request("/api/measurements", "POST", "", [row])))
-        .status,
-      401
-    )
+    for (const value of [undefined, "false", "TRUE", "1"]) {
+      if (value === undefined) delete process.env.ETL_PERMITIR_EN_PRODUCCION
+      else process.env.ETL_PERMITIR_EN_PRODUCCION = value
+      assert.equal((await measurements.GET(request())).status, 403)
+      assert.equal(
+        (await measurements.POST(request("POST", [row]))).status,
+        403
+      )
+    }
     assert.equal(calls, 0)
+    process.env.ETL_PERMITIR_EN_PRODUCCION = "true"
     assert.equal(
-      (
-        await session.POST(
-          request(
-            "/api/admin/session",
-            "POST",
-            "",
-            { password: process.env.ADMIN_PASSWORD },
-            "https://attacker.example"
-          )
-        )
-      ).status,
+      (await measurements.POST(request("POST", [row], null))).status,
       403
     )
     assert.equal(
       (
-        await session.POST(
-          request("/api/admin/session", "POST", "", { password: "wrong" })
+        await measurements.POST(
+          request("POST", [row], "https://attacker.example")
         )
       ).status,
-      401
+      403
     )
-    const login = await session.POST(
-      request("/api/admin/session", "POST", "", {
-        password: process.env.ADMIN_PASSWORD,
-      })
-    )
-    assert.equal(login.status, 200)
-    const setCookie = login.headers.get("set-cookie")!
-    for (const flag of [
-      "HttpOnly",
-      "Secure",
-      "SameSite=Strict",
-      "Max-Age=28800",
-      "Path=/",
-    ])
-      assert.ok(setCookie.includes(flag))
-    const cookie = setCookie.split(";")[0]
-    assert.ok(cookie.startsWith("__Host-"))
     assert.equal(
       (
         await measurements.GET(
-          request("/api/measurements", "GET", cookie + "tampered")
-        )
-      ).status,
-      401
-    )
-    const realNow = Date.now
-    Date.now = () => realNow() - 9 * 60 * 60 * 1000
-    let expired: string
-    try {
-      expired = sessionCookie().split(";")[0]
-    } finally {
-      Date.now = realNow
-    }
-    assert.equal(
-      (await measurements.GET(request("/api/measurements", "GET", expired)))
-        .status,
-      401
-    )
-    assert.equal(
-      (
-        await measurements.POST(
-          request("/api/measurements", "POST", cookie, [row], null)
+          request("GET", undefined, "https://attacker.example")
         )
       ).status,
       403
     )
+    const crossSite = request("POST", [row])
+    crossSite.headers.set("sec-fetch-site", "cross-site")
+    assert.equal((await measurements.POST(crossSite)).status, 403)
+    process.env.APP_ORIGIN = "https://canonical.example"
+    assert.equal((await measurements.POST(request("POST", [row]))).status, 403)
+    delete process.env.APP_ORIGIN
     assert.equal(
-      (
-        await measurements.POST(
-          request(
-            "/api/measurements",
-            "POST",
-            cookie,
-            [row],
-            "https://attacker.example"
-          )
-        )
-      ).status,
-      403
-    )
-    assert.equal(
-      (
-        await measurements.POST(
-          request("/api/measurements", "POST", cookie, [{ ciudad: "X" }])
-        )
-      ).status,
+      (await measurements.POST(request("POST", [{ ciudad: "X" }]))).status,
       400
     )
     assert.equal(
-      (
-        await measurements.POST(
-          request("/api/measurements", "POST", cookie, Array(501).fill(row))
-        )
-      ).status,
+      (await measurements.POST(request("POST", Array(501).fill(row)))).status,
       400
     )
     assert.equal(
-      (
-        await measurements.POST(
-          request("/api/measurements", "POST", cookie, "x".repeat(180001))
-        )
-      ).status,
+      (await measurements.POST(request("POST", "x".repeat(180001)))).status,
       400
     )
     assert.equal(calls, 0)
-    const written = await measurements.POST(
-      request("/api/measurements", "POST", cookie, [row])
-    )
-    assert.equal(written.status, 200)
-    assert.deepEqual(await written.json(), { processed: 1, verified: 1 })
-    const read = await measurements.GET(
-      request("/api/measurements", "GET", cookie)
-    )
+    for (let i = 0; i < 2; i++) {
+      const written = await measurements.POST(request("POST", [row]))
+      assert.equal(written.status, 200)
+      assert.equal(written.headers.get("set-cookie"), null)
+      assert.deepEqual(await written.json(), { processed: 1, verified: 1 })
+    }
+    const read = await measurements.GET(request("GET", undefined, null))
+    assert.equal(read.status, 200)
+    assert.equal(read.headers.get("set-cookie"), null)
     assert.deepEqual(await read.json(), { rows: [row], total: 1 })
-    const logout = await session.DELETE(
-      request("/api/admin/session", "DELETE", cookie)
-    )
-    assert.match(logout.headers.get("set-cookie")!, /Max-Age=0/)
+    persisted = false
+    const unverified = await measurements.POST(request("POST", [row]))
+    assert.equal(unverified.status, 400)
+    assert.match((await unverified.json()).error, /no se verificaron/)
+    persisted = true
     const originalError = console.error
     let log = ""
     console.error = (...values) => {
@@ -208,9 +140,7 @@ test("producción: autorización, origen, validación, upsert y verificación", 
     }
     fail = true
     try {
-      const failure = await measurements.GET(
-        request("/api/measurements", "GET", cookie)
-      )
+      const failure = await measurements.GET(request())
       assert.equal(failure.status, 502)
       assert.ok(!(await failure.text()).includes("sb_secret"))
       assert.match(log, /42501/)
@@ -218,22 +148,28 @@ test("producción: autorización, origen, validación, upsert y verificación", 
     } finally {
       console.error = originalError
     }
-    delete process.env.ADMIN_SESSION_SECRET
-    assert.equal(
-      (await measurements.GET(request("/api/measurements", "GET", cookie)))
-        .status,
-      503
-    )
-    Object.assign(process.env, { NODE_ENV: "development" })
     fail = false
-    assert.equal(
-      (
-        await measurements.GET(
-          new Request("http://localhost:3000/api/measurements")
-        )
-      ).status,
-      200
-    )
+    Object.assign(process.env, { NODE_ENV: "development" })
+    delete process.env.ETL_PERMITIR_EN_PRODUCCION
+    process.env.APP_ORIGIN = origin
+    for (const host of ["localhost", "127.0.0.1", "[::1]"]) {
+      assert.equal(
+        (
+          await measurements.GET(
+            new Request(`http://${host}:3000/api/measurements`)
+          )
+        ).status,
+        200
+      )
+      const localWrite = await measurements.POST(
+        new Request(`http://${host}:3000/api/measurements`, {
+          method: "POST",
+          body: JSON.stringify([row]),
+        })
+      )
+      assert.equal(localWrite.status, 200)
+    }
+    assert.equal((await measurements.GET(request())).status, 403)
   } finally {
     globalThis.fetch = originalFetch
     for (const key of Object.keys(process.env))

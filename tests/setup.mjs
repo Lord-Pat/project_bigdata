@@ -10,7 +10,6 @@ registerHooks({
         new URL(`../${specifier.slice(2)}.ts`, import.meta.url).href,
         context
       )
-    if (specifier === "./auth") return nextResolve("./auth.ts", context)
     return nextResolve(specifier, context)
   },
 })

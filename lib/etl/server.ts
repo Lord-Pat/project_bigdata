@@ -1,6 +1,48 @@
 ﻿import "server-only"
-export { authorize as localGuard } from "./auth"
-import { ApiError } from "./auth"
+export class ApiError extends Error {
+  status: number
+  constructor(message: string, status: number) {
+    super(message)
+    this.status = status
+  }
+}
+export function localGuard(request: Request) {
+  const url = new URL(request.url)
+  const local =
+    process.env.NODE_ENV !== "production" &&
+    ["localhost", "127.0.0.1", "[::1]"].includes(url.hostname)
+  const production =
+    process.env.NODE_ENV === "production" &&
+    process.env.ETL_PERMITIR_EN_PRODUCCION === "true"
+  if (!local && !production)
+    throw new ApiError(
+      "Flujo deshabilitado: configura ETL_PERMITIR_EN_PRODUCCION=true para habilitarlo en producción.",
+      403
+    )
+  const origin = request.headers.get("origin")
+  const expected = local ? url.origin : process.env.APP_ORIGIN || url.origin
+  const modifying = !["GET", "HEAD"].includes(request.method)
+  if (
+    (origin && origin !== expected) ||
+    (modifying && !local && !origin) ||
+    request.headers.get("sec-fetch-site") === "cross-site"
+  )
+    throw new ApiError("Origen no permitido.", 403)
+}
+export function apiError(error: unknown) {
+  return Response.json(
+    {
+      error:
+        error instanceof Error
+          ? error.message
+          : "No se pudo completar la operación.",
+    },
+    {
+      status: error instanceof ApiError ? error.status : 400,
+      headers: { "Cache-Control": "no-store" },
+    }
+  )
+}
 export async function database(query: URLSearchParams, init: RequestInit = {}) {
   const url = process.env.SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL
   const secret =

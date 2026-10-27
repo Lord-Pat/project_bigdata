@@ -1,6 +1,5 @@
 "use client"
 import Link from "next/link"
-import { AdminAccess } from "@/components/admin-access"
 import { useMemo, useRef, useState } from "react"
 import {
   CloudSun,
@@ -452,7 +451,6 @@ export default function Page() {
             guardar.
           </p>
         </div>
-        <AdminAccess />
         <div className="work-grid">
           <aside className="extraction">
             <h2>1. Configura la extracción</h2>

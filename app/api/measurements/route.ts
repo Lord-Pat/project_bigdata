@@ -1,6 +1,5 @@
-﻿import { apiError } from "@/lib/etl/auth"
 import { clean, fields, keyOf, type Candidate, type Row } from "@/lib/etl/core"
-import { database, localGuard } from "@/lib/etl/server"
+import { apiError, database, localGuard } from "@/lib/etl/server"
 export async function POST(request: Request) {
   try {
     localGuard(request)
