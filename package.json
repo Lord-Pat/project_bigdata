@@ -10,7 +10,7 @@
     "lint": "eslint",
     "format": "prettier --write \"**/*.{ts,tsx}\"",
     "typecheck": "tsc --noEmit",
-    "test": "node --experimental-strip-types --test tests/core.test.ts",
+    "test": "node --experimental-strip-types --test tests/core.test.ts tests/api.test.ts",
     "test:e2e": "playwright test"
   },
   "dependencies": {

@@ -1,3 +1,4 @@
+﻿import { apiError } from "@/lib/etl/auth"
 import { clean, fields, keyOf, type Candidate, type Row } from "@/lib/etl/core"
 import { database, localGuard } from "@/lib/etl/server"
 export async function POST(request: Request) {
@@ -73,12 +74,12 @@ export async function POST(request: Request) {
       throw new Error(
         "La escritura terminó, pero no se verificaron todas las claves. Reintenta el lote: el upsert evita duplicados."
       )
-    return Response.json({ processed: valid.length, verified: valid.length })
-  } catch (error) {
     return Response.json(
-      { error: error instanceof Error ? error.message : "Error de carga." },
-      { status: 400 }
+      { processed: valid.length, verified: valid.length },
+      { headers: { "Cache-Control": "no-store" } }
     )
+  } catch (error) {
+    return apiError(error)
   }
 }
 export async function GET(request: Request) {
@@ -113,14 +114,16 @@ export async function GET(request: Request) {
         )
       }
     const response = await database(q, { headers: { Prefer: "count=exact" } })
-    return Response.json({
-      rows: await response.json(),
-      total: Number(response.headers.get("content-range")?.split("/")[1] || 0),
-    })
-  } catch (error) {
     return Response.json(
-      { error: error instanceof Error ? error.message : "Error de consulta." },
-      { status: 400 }
+      {
+        rows: await response.json(),
+        total: Number(
+          response.headers.get("content-range")?.split("/")[1] || 0
+        ),
+      },
+      { headers: { "Cache-Control": "no-store" } }
     )
+  } catch (error) {
+    return apiError(error)
   }
 }
