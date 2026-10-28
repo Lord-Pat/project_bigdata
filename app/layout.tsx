@@ -1,4 +1,6 @@
 import type { Metadata } from "next"
+import { Suspense } from "react"
+import MeteoLabShell from "@/components/MeteoLabShell"
 import "./globals.css"
 export const metadata: Metadata = {
   title: "MeteoLab · Pipeline ETL",
@@ -10,7 +12,17 @@ export default function RootLayout({
 }: Readonly<{ children: React.ReactNode }>) {
   return (
     <html lang="es">
-      <body>{children}</body>
+      <body>
+        <Suspense
+          fallback={
+            <div className="workspace dashboard-loading" role="status">
+              Cargando MeteoLab…
+            </div>
+          }
+        >
+          <MeteoLabShell>{children}</MeteoLabShell>
+        </Suspense>
+      </body>
     </html>
   )
 }

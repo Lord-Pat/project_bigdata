@@ -1,30 +1,48 @@
 ﻿import { test, expect } from "@playwright/test"
+async function goStage(page: import("@playwright/test").Page, index: number) {
+  await page
+    .getByRole("navigation", { name: "Etapas del dashboard" })
+    .getByRole("button")
+    .nth(index)
+    .click()
+}
 test("flujo real: 24 horas, selección y preview", async ({ page, request }) => {
   const errors: string[] = []
   page.on("pageerror", (e) => errors.push(e.message))
-  await page.goto("http://localhost:3000")
+  await page.goto("http://localhost:3000/dashboard")
   await expect(page).toHaveTitle(/MeteoLab/)
   await page.screenshot({ path: "tests/desktop.png", fullPage: true })
   await page.getByLabel("Fecha final", { exact: true }).fill("2026-09-01")
   await page.getByRole("button", { name: "Extraer datos", exact: true }).click()
+  await goStage(page, 1)
   await expect(
-    page.getByRole("button", { name: "Seleccionar todas (24)", exact: true })
+    page.getByRole("button", {
+      name: "Seleccionar todos los filtrados (24)",
+      exact: true,
+    })
   ).toBeVisible({ timeout: 60000 })
   await page
-    .getByRole("button", { name: "Seleccionar todas (24)", exact: true })
+    .getByRole("button", {
+      name: "Seleccionar todos los filtrados (24)",
+      exact: true,
+    })
     .click()
+  await goStage(page, 2)
   await page.getByRole("tab", { name: "Vista previa", exact: true }).click()
   await expect(page.locator("tbody tr")).toHaveCount(24)
+  await goStage(page, 3)
   await expect(
     page.getByRole("button", {
       name: "Subir 24 registros a Supabase",
       exact: true,
     })
   ).toBeEnabled()
+  await goStage(page, 1)
   await page.getByLabel("Solo registros con lluvia").check()
   await expect(
     page.getByText(/seleccionadas fuera de los filtros/)
   ).toBeVisible()
+  await goStage(page, 3)
   await page
     .getByRole("tab", { name: "Datos en Supabase", exact: true })
     .click()
@@ -88,16 +106,24 @@ test("fixtures aislados: selección entre páginas, fallo parcial, snapshot y re
         : { json: { processed: rows.length, verified: rows.length } }
     )
   })
-  await page.goto("http://localhost:3000")
+  await page.goto("http://localhost:3000/dashboard")
   await page.getByRole("button", { name: "Extraer datos", exact: true }).click()
+  await goStage(page, 1)
   await expect(
-    page.getByRole("button", { name: "Seleccionar todas (720)", exact: true })
+    page.getByRole("button", {
+      name: "Seleccionar todos los filtrados (720)",
+      exact: true,
+    })
   ).toBeVisible()
   await page
-    .getByRole("button", { name: "Seleccionar todas (720)", exact: true })
+    .getByRole("button", {
+      name: "Seleccionar todos los filtrados (720)",
+      exact: true,
+    })
     .click()
   await page.getByRole("button", { name: "Siguiente", exact: true }).click()
   await expect(page.locator("tbody input:checked")).toHaveCount(25)
+  await goStage(page, 2)
   await page.getByRole("tab", { name: "Vista previa", exact: true }).click()
   const firstDate = await page
     .locator("tbody tr")
@@ -105,13 +131,16 @@ test("fixtures aislados: selección entre páginas, fallo parcial, snapshot y re
     .locator("td")
     .nth(1)
     .textContent()
+  await goStage(page, 3)
   await page
     .getByRole("button", {
       name: "Subir 720 registros a Supabase",
       exact: true,
     })
     .click()
+  await goStage(page, 1)
   await page.getByLabel("Temperatura °C mínima").fill("100")
+  await goStage(page, 3)
   await expect(page.getByText(/Procesadas y verificadas: 500/)).toBeVisible()
   expect(payloads.map((p) => p.length)).toEqual([500, 220])
   expect((payloads[0][0] as { fecha_hora: string }).fecha_hora).toBe(firstDate)
@@ -151,18 +180,23 @@ test("reintento de una ciudad conserva el periodo original y no duplica", async 
       },
     })
   })
-  await page.goto("http://localhost:3000")
+  await page.goto("http://localhost:3000/dashboard")
   await page.getByLabel("Madrid", { exact: false }).first().check()
   await page.getByRole("button", { name: "Extraer datos", exact: true }).click()
   await expect(
     page.getByRole("button", { name: "Reintentar Madrid", exact: true })
   ).toBeEnabled()
+  await goStage(page, 0)
   await page.getByLabel("Fecha final", { exact: true }).fill("2026-09-15")
   await page
     .getByRole("button", { name: "Reintentar Madrid", exact: true })
     .click()
+  await goStage(page, 1)
   await expect(
-    page.getByRole("button", { name: "Seleccionar todas (2)", exact: true })
+    page.getByRole("button", {
+      name: "Seleccionar todos los filtrados (2)",
+      exact: true,
+    })
   ).toBeVisible()
   expect(calls.map((c) => c.searchParams.get("city"))).toEqual([
     "Barcelona",

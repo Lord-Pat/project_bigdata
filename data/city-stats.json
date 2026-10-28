@@ -1,0 +1,62 @@
+{
+  "source": "https://archive-api.open-meteo.com/v1/archive",
+  "timezone": "UTC",
+  "generated_at": "2026-10-28T22:12:58.673Z",
+  "cities": [
+    {
+      "city": "Barcelona",
+      "start_date": "2026-09-01",
+      "end_date": "2026-09-30",
+      "temperature_mean_c": 23.9,
+      "humidity_mean_pct": 70.6,
+      "measurements": {
+        "temperature": 720,
+        "humidity": 720
+      }
+    },
+    {
+      "city": "Madrid",
+      "start_date": "2026-09-01",
+      "end_date": "2026-09-30",
+      "temperature_mean_c": 25.3,
+      "humidity_mean_pct": 32.8,
+      "measurements": {
+        "temperature": 720,
+        "humidity": 720
+      }
+    },
+    {
+      "city": "Sevilla",
+      "start_date": "2026-09-01",
+      "end_date": "2026-09-30",
+      "temperature_mean_c": 28,
+      "humidity_mean_pct": 46.4,
+      "measurements": {
+        "temperature": 720,
+        "humidity": 720
+      }
+    },
+    {
+      "city": "Bilbao",
+      "start_date": "2026-09-01",
+      "end_date": "2026-09-30",
+      "temperature_mean_c": 20.3,
+      "humidity_mean_pct": 76.1,
+      "measurements": {
+        "temperature": 720,
+        "humidity": 720
+      }
+    },
+    {
+      "city": "Valencia",
+      "start_date": "2026-09-01",
+      "end_date": "2026-09-30",
+      "temperature_mean_c": 24.7,
+      "humidity_mean_pct": 66.9,
+      "measurements": {
+        "temperature": 720,
+        "humidity": 720
+      }
+    }
+  ]
+}

@@ -2,6 +2,12 @@
 
 Aplicación en Next.js 16, React, TypeScript, Tailwind y el botón shadcn existente. Interfaz en castellano, sin datos ficticios en el flujo principal.
 
+## Medias históricas de las cards
+
+`npm run generate:city-stats` (Node.js 24) consulta manualmente Open-Meteo para las ciudades de `CITIES` y el periodo UTC del 01/09/2026 al 30/09/2026. Para otro periodo, cambia `start` y `end` en `scripts/generate-city-stats.mjs` y vuelve a ejecutar el comando. Después recompila y despliega para publicar los nuevos valores.
+
+El script guarda solo las medias redondeadas, el periodo y los conteos por variable en `data/city-stats.json`. Deduplica cada hora, ignora valores no numéricos y rechaza respuestas incompletas. Solo sustituye el archivo cuando las cinco ciudades se han procesado correctamente. Las cards importan este JSON estático; no consultan servicios ni dependen del dashboard. Fuente: Open-Meteo (CC BY 4.0).
+
 ## Instalación y ejecución
 
 Requiere Node.js 24 (las pruebas unitarias usan soporte nativo de TypeScript).
@@ -13,7 +19,37 @@ npm run dev -- --hostname localhost
 
 Abre http://localhost:3000. En desarrollo local se conserva el acceso directo. En producción, las consultas y cargas de Supabase son públicas cuando `ETL_PERMITIR_EN_PRODUCCION=true`, sin login. No expongas el servidor de desarrollo a Internet.
 
-## Supabase
+## Mapa de España (MapTiler)
+
+La home `/` contiene únicamente el mapa de España a pantalla completa (`100dvh`, con fallback `100vh`), sus cinco marcadores procedentes de `CITIES` y las atribuciones. No hay header, logo, menú ni contenido ETL visible debajo. Al seleccionar una ciudad se conserva el popup de nombre y se abre su tarjeta glassmorphism con coordenadas, datos disponibles de la sesión y «Acceder al dashboard». Este enlace navega a `/dashboard?city=NombreCiudad`, sin iniciar extracciones. El dashboard conserva su header, el ETL completo y un enlace para volver al mapa.
+
+El componente ETL se descarga al entrar por primera vez al dashboard y permanece montado, oculto cuando se muestra el mapa: las extracciones, las cargas en curso, los filtros y las selecciones sobreviven a la navegación interna. No se duplican motores ni se utiliza almacenamiento nuevo. Recargar o cerrar la pestaña sigue eliminando el estado en memoria; durante extracción/carga se solicita la advertencia nativa del navegador.
+
+El mapa utiliza `NEXT_PUBLIC_MAPTILER_URL`, con la URL HTTPS del estilo de MapTiler y su clave pública. Acepta `/maps/<mapa>/style.json?key=…` y la URL del visor `/maps/<mapa>/?key=…`, que convierte al estilo JSON del mismo mapa. Restringe esta clave pública a tus dominios en MapTiler y configura la variable en Vercel antes de compilar.
+
+La librería y el estilo se descargan en paralelo. Se utiliza una sola instancia por montaje, sin reinicializarla al seleccionar ciudades. El encuadre se deriva de sus coordenadas y se adapta al tamaño del contenedor; los gestos de cámara están deshabilitados y los marcadores siguen siendo botones accesibles. Las atribuciones permanecen visibles.
+
+La carga tiene un límite total de 15 segundos desde la inicialización, incluidos librería, estilo y recursos. Durante la espera y en caso de error se pueden seleccionar las cinco ciudades sin mapa. El botón «Reintentar» libera la instancia anterior y vuelve a cargarla. No hay peticiones meteorológicas para mostrar marcadores o tarjetas. Al pasar el cursor o enfocar un pin se muestra su nombre; al seleccionarlo se abre también su tarjeta con acceso al dashboard. Escape o un clic fuera cierran la selección. El enlace utiliza navegación interna para preservar el trabajo en memoria del dashboard.
+
+Las mediciones reales, las condiciones y sus límites se documentan en [docs/map-performance.md](docs/map-performance.md). También están disponibles en User Timing con prefijo `meteolab:map:` y en el evento de navegador `meteolab:map-metrics`.
+
+Los scripts `postinstall`, `predev` y `prebuild` preparan el worker local de MapLibre, con una ruta que incluye su versión, para que funcione con Turbopack. Los archivos generados en `public/maplibre/` no se versionan.
+
+## Dashboard ETL
+
+`/dashboard` mantiene sidebar, encabezado, progreso y resumen lateral. Sus cuatro etapas son **Extracción de datos**, **Exploración y selección**, **Inspector JSON** y **Carga a Supabase**. Los valores proceden exclusivamente del estado existente: no se incluyen registros de ejemplo ni simulaciones.
+
+La extracción mantiene su configuración, atribución y reintentos por ciudad. Al finalizar extracción y procesamiento, avanza automáticamente a exploración si alguna ciudad ha devuelto datos; si todas fallan permanece en extracción. Los fallos parciales se muestran por ciudad y se pueden reintentar. Las ciudades correctas sin filas válidas muestran una explicación, sin ofrecer selección de filas inexistentes.
+
+Exploración conserva filtros, orden, paginación, descartes y selección. Sus opciones de ciudad proceden de los registros válidos realmente obtenidos, no de `CITIES`. «Modificar extracción» conserva la configuración y el trabajo al regresar a la primera etapa. Una nueva extracción completa exige confirmación si reemplaza resultados, filtros o selección; al confirmarla sustituye la sesión anterior, sin acumular extracciones ni borrar el histórico de Supabase.
+
+El inspector ofrece únicamente JSON realmente obtenidos, además de transformados y vista previa mediante pestañas internas. El visor limita su texto a 16.000 caracteres, pero la descarga original sigue siendo completa. Carga muestra ciudades seleccionadas, filas exactas para enviar, lotes previstos y estados diferenciados de datos locales, selección y filas verificadas. Mantiene el snapshot, los lotes de hasta 500, la verificación, los reintentos y la consulta independiente del destino, que admite todas las ciudades y puede mostrar extracciones anteriores. Sin selección, el envío permanece deshabilitado y se ofrece volver a exploración.
+
+Cambiar de etapa no inicia extracciones ni borra datos, filtros, selecciones o resultados. El trabajo sigue en memoria al navegar al mapa y regresar; recargar la página conserva la limitación anterior de perder ese estado.
+
+El dashboard reutiliza los mismos handlers y el botón shadcn existente. Sus estilos están limitados a `.etl-dashboard`; la home y sus cards permanecen independientes. Las pruebas usan fixtures aislados para verificar cargas y fallos controlados; no representan una escritura real en Supabase.
+
+## Configuración de Supabase
 
 1. Copia `.env.example` a `.env.local` sin sobrescribir credenciales existentes.
 2. Configura `SUPABASE_URL` y `SUPABASE_SECRET_KEY` (o `SUPABASE_SERVICE_ROLE_KEY`). También se admite la URL existente `NEXT_PUBLIC_SUPABASE_URL`. La clave pública no sirve para escribir desde este flujo.
@@ -40,7 +76,7 @@ La migración existente conserva RLS y revoca acceso a `anon` y `authenticated`.
 Para comprobar el despliegue real:
 
 1. Abre la web desplegada directamente, sin iniciar sesión.
-2. Extrae un día de una ciudad, selecciona unas filas y revisa la vista previa.
+2. Selecciona una ciudad, pulsa «Acceder al dashboard», extrae un día y revisa unas filas en la vista previa.
 3. Sube los registros. Comprueba que el lote aparece procesado y verificado; si falla, consulta el error y los logs del servidor en Vercel.
 4. Actualiza «Datos en Supabase» y contrasta las filas en el Table Editor de Supabase.
 5. Repite la misma carga: el upsert debe conservar una sola fila por ciudad y hora.
